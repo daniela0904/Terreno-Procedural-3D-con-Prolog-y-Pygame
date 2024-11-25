@@ -51,41 +51,46 @@ polygons = []
 prolog = Prolog()
 prolog.consult("generador.pl")  # Consulta de parametros de prolog
 
+altura_cache = {}
+color_cache = {}
+
+def get_altura(x, y):
+    if (x, y) in altura_cache:
+        return altura_cache[(x, y)]
+    altura_query = list(prolog.query(f"altura({x}, {y}, Altura)"))
+    altura = altura_query[0]['Altura'] if altura_query else 0
+    altura_cache[(x, y)] = altura
+    return altura
+
+def get_color(altura):
+    if altura in color_cache:
+        return color_cache[altura]
+    color_query = list(prolog.query(f"color({altura}, R, G, B)"))
+    color = tuple(color_query[0][channel] for channel in ['R', 'G', 'B']) if color_query else (255, 255, 255)
+    color_cache[altura] = color
+    return color
+
 def generate_poly_row(y):
     global polygons
-    for x in range(50):  
+    for x in range(50):
         poly_copy = deepcopy(square_polygon)
-        offset_polygon(poly_copy, [x - 25, 5, y + 5])  # desplazamiento
+        offset_polygon(poly_copy, [x - 25, 5, y + 5])
 
-        # Consulta de altura en
         for corner in poly_copy:
-            print(f"Consultando altura para ({corner[0]}, {corner[2]})")  
-            altura_query = list(prolog.query(f"altura({corner[0]}, {corner[2]}, Altura)"))
-            if not altura_query:
-                print(f"No se encontró altura para ({corner[0]}, {corner[2]})")
-                altura = 0  
-            else:
-                altura = altura_query[0]['Altura']
-            corner[1] -= altura
+            corner[1] -= get_altura(corner[0], corner[2])
 
-        # Consulta del color basado en Prolog
         altura_promedio = sum([corner[1] for corner in poly_copy]) / len(poly_copy)
-        color_query = list(prolog.query(f"color({altura_promedio}, R, G, B)"))
-        if not color_query:
-            print(f"No se encontró color para altura promedio {altura_promedio}")
-            color = (255, 255, 255)  
-        else:
-            color = tuple(color_query[0][channel] for channel in ['R', 'G', 'B'])
+        color = get_color(altura_promedio)
 
         polygons = [[poly_copy, color]] + polygons
 
-# Generar filas 
+# Generar filas
 next_row = 0
 for y in range(26):
     generate_poly_row(y)
     next_row += 1
 
-# Loop 
+# Loop
 while True:
     screen.fill((100, 200, 250))
     poly_data['pos'][2] -= 0.25
