@@ -57,10 +57,33 @@ color_cache = {}
 def get_altura(x, y):
     if (x, y) in altura_cache:
         return altura_cache[(x, y)]
-    altura_query = list(prolog.query(f"altura({x}, {y}, Altura)"))
+    perlin_value = noise.pnoise2(x / 10, y / 10)
+    altura_query = list(prolog.query(f"altura({x}, {y}, {perlin_value}, Altura)"))
     altura = altura_query[0]['Altura'] if altura_query else 0
     altura_cache[(x, y)] = altura
     return altura
+
+def get_color(altura):
+    if altura in color_cache:
+        return color_cache[altura]
+    color_query = list(prolog.query(f"color({altura}, R, G, B)"))
+    color = tuple(color_query[0][channel] for channel in ['R', 'G', 'B']) if color_query else (255, 255, 255)
+    color_cache[altura] = color
+    return color
+
+def generate_poly_row(y):
+    global polygons
+    for x in range(50):
+        poly_copy = deepcopy(square_polygon)
+        offset_polygon(poly_copy, [x - 25, 5, y + 5])
+
+        for corner in poly_copy:
+            corner[1] -= get_altura(corner[0], corner[2])
+
+        altura_promedio = sum([corner[1] for corner in poly_copy]) / len(poly_copy)
+        color = get_color(altura_promedio)
+
+        polygons = [[poly_copy, color]] + polygons
 
 def get_color(altura):
     if altura in color_cache:
