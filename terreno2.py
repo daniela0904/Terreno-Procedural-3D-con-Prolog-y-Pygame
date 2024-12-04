@@ -18,7 +18,7 @@ prolog = Prolog()
 prolog.consult("generador.pl")
 
 # Configuración de terreno
-poly_data = {'pos': [0, 0, 4.5]}
+poly_data = {'pos': [0, 0, 4.5], 'rotation': [0, 0]}  # Posición y rotación de la cámara
 square_polygon = [[-0.5, 0.5, -0.5], [0.5, 0.5, -0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]]
 polygons, altura_cache, color_cache = [], {}, {}
 
@@ -28,7 +28,6 @@ mouse_sensitivity = 0.1
 
 # Nubes
 clouds = []
-
 def generate_clouds():
     global clouds
     if len(clouds) < 5:  # Limitar el número de nubes en la pantalla
@@ -48,9 +47,37 @@ def draw_clouds():
     for cloud in clouds:
         pygame.draw.circle(screen, (255, 255, 255), (int(cloud[0]), int(cloud[1])), cloud[2])
 
+# Sol
+sun_pos = [400, 100]  # Posición inicial del sol
+sun_radius = 50  # Radio del sol
+sun_color = (255, 255, 0)  # Color amarillo del sol
+
+def draw_sun_rays(sun_pos, sun_radius, num_rays=12, ray_length=30, ray_color=(255, 223, 0)):
+    angle_step = 360 / num_rays
+    for i in range(num_rays):
+        angle = math.radians(i * angle_step)
+        inner_x = sun_pos[0] + sun_radius * math.cos(angle)
+        inner_y = sun_pos[1] + sun_radius * math.sin(angle)
+        outer_x1 = sun_pos[0] + (sun_radius + ray_length) * math.cos(angle - math.radians(5))
+        outer_y1 = sun_pos[1] + (sun_radius + ray_length) * math.sin(angle - math.radians(5))
+        outer_x2 = sun_pos[0] + (sun_radius + ray_length) * math.cos(angle + math.radians(5))
+        outer_y2 = sun_pos[1] + (sun_radius + ray_length) * math.sin(angle + math.radians(5))
+        pygame.draw.polygon(screen, ray_color, [(inner_x, inner_y), (outer_x1, outer_y1), (outer_x2, outer_y2)])
+
 # Funciones de utilidades
 def offset_polygon(polygon, offset):
     return [[p[0] + offset[0], p[1] + offset[1], p[2] + offset[2]] for p in polygon]
+
+def rotate_point(point, angle_x, angle_y):
+    """Rotar un punto alrededor del eje X e Y."""
+    x, y, z = point
+    # Rotación en el eje Y
+    cosa, sina = math.cos(angle_y), math.sin(angle_y)
+    x, z = cosa * x - sina * z, sina * x + cosa * z
+    # Rotación en el eje X
+    cosb, sinb = math.cos(angle_x), math.sin(angle_x)
+    y, z = cosb * y - sinb * z, sinb * y + cosb * z
+    return [x, y, z]
 
 def project_polygon(polygon):
     return [[
@@ -88,28 +115,29 @@ while True:
     screen.fill((100, 200, 250))  # Fondo de cielo
     poly_data['pos'][2] -= 0.25
 
-    # Generar y mover las nubes
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_w]:  # Mover hacia adelante
+        poly_data['pos'][2] += 0.5
+    if keys[pygame.K_s]:  # Mover hacia atrás
+        poly_data['pos'][2] -= 0.5
+    if keys[pygame.K_a]:  # Rotar izquierda
+        poly_data['rotation'][1] += 0.05
+    if keys[pygame.K_d]:  # Rotar derecha
+        poly_data['rotation'][1] -= 0.05
+
     generate_clouds()
     move_clouds()
 
-    # Dibujar las nubes
+    # Dibujar el sol
+    pygame.draw.circle(screen, sun_color, sun_pos, sun_radius)
+    draw_sun_rays(sun_pos, sun_radius)
+
     draw_clouds()
 
-    # Procesar eventos
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:  # Click izquierdo
-                mouse_dragging = True
-        elif event.type == pygame.MOUSEBUTTONUP:
-            if event.button == 1:  # Liberar click izquierdo
-                mouse_dragging = False
-        elif event.type == pygame.MOUSEMOTION and mouse_dragging:
-            dx, dy = event.rel
-            poly_data['pos'][0] += dx * mouse_sensitivity
-            poly_data['pos'][1] -= dy * mouse_sensitivity
 
     # Actualizar terreno si es necesario
     if polygons[-1][0][0][2] < -poly_data['pos'][2]:
@@ -118,7 +146,10 @@ while True:
 
     # Renderizar polígonos
     for polygon, color in polygons:
-        pygame.draw.polygon(screen, color, project_polygon(offset_polygon(polygon, poly_data['pos'])))
+        rotated = [rotate_point(corner, poly_data['rotation'][0], poly_data['rotation'][1]) for corner in polygon]
+        projected = project_polygon(offset_polygon(rotated, poly_data['pos']))
+        pygame.draw.polygon(screen, color, projected)
 
     pygame.display.flip()
     clock.tick(60)
+
